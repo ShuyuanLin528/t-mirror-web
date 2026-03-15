@@ -63,6 +63,9 @@ const translations = {
         saveRecord: "SAVE RECORD",
         snapshot: "SNAPSHOT",
         exportMp4: "EXPORT MP4",
+        exportCombined: "EXPORT SYNC",
+        exportV1: "EXPORT PRO",
+        exportV2: "EXPORT ME",
         archives: "ARCHIVES",
         noRecords: "NO RECORDS FOUND",
         load: "LOAD",
@@ -105,6 +108,9 @@ const translations = {
         saveRecord: "存入记录库",
         snapshot: "保存截屏",
         exportMp4: "导出合成视频",
+        exportCombined: "导出对比",
+        exportV1: "导出专业",
+        exportV2: "导出自己",
         archives: "对比记录库",
         noRecords: "暂未保存任何记录",
         load: "加载记录",
@@ -311,8 +317,12 @@ const VideoBox = ({ title, vState, setVState, vRef, badgeText, isPlaying, isPlay
                             <video 
                                 ref={vRef} src={vState.url} draggable={false}
                                 style={{ position: 'absolute', width: `${finalW_pct}%`, height: `${finalH_pct}%`, left: `${left_pct}%`, top: `${top_pct}%`, objectFit: 'cover', maxWidth: 'none', maxHeight: 'none' }}
-                                className={`cursor-move`} playsInline muted
-                                onLoadedMetadata={(e) => setVState(p => ({ ...p, duration: vRef.current.duration || 1, out: vRef.current.duration || 1, vw: e.target.videoWidth || 1, vh: e.target.videoHeight || 1 }))}
+                                className={`cursor-move`} playsInline muted preload="auto"
+                                onLoadedMetadata={(e) => {
+                                    setVState(p => ({ ...p, duration: vRef.current.duration || 1, out: vRef.current.duration || 1, vw: e.target.videoWidth || 1, vh: e.target.videoHeight || 1 }));
+                                    // 强制移动端渲染首帧 (修复上传后白屏问题)
+                                    vRef.current.currentTime = 0.001;
+                                }}
                                 onTimeUpdate={handleTimeUpdate}
                             />
                         </div>
@@ -436,7 +446,7 @@ export default function TennisSyncApp() {
     const v1Ref = useRef(null);
     const v2Ref = useRef(null);
     
-    const [ratioKey, setRatioKey] = useState('1:1');
+    const [ratioKey, setRatioKey] = useState('3:4');
     const [showGrid, setShowGrid] = useState(false);
 
     const [masterProgress, setMasterProgress] = useState(0); 
@@ -455,6 +465,7 @@ export default function TennisSyncApp() {
     };
 
     const togglePlay = () => {
+        const safeTargetTime = parseFloat(targetTime) || 2;
         if (isPlaying) {
             setIsPlaying(false); isPlayingRef.current = false;
             if (v1Ref.current) v1Ref.current.pause();
@@ -467,11 +478,11 @@ export default function TennisSyncApp() {
                 startP = 0; setMasterProgress(0); syncVideosToProgress(0);
             }
             if (v1Ref.current) {
-                const r1 = targetTime > 0 && (v1.out - v1.in) > 0 ? (v1.out - v1.in) / targetTime : 1;
+                const r1 = safeTargetTime > 0 && (v1.out - v1.in) > 0 ? (v1.out - v1.in) / safeTargetTime : 1;
                 v1Ref.current.playbackRate = r1; v1Ref.current.play().catch(e => console.error(e));
             }
             if (v2Ref.current) {
-                const r2 = targetTime > 0 && (v2.out - v2.in) > 0 ? (v2.out - v2.in) / targetTime : 1;
+                const r2 = safeTargetTime > 0 && (v2.out - v2.in) > 0 ? (v2.out - v2.in) / safeTargetTime : 1;
                 v2Ref.current.playbackRate = r2; v2Ref.current.play().catch(e => console.error(e));
             }
 
@@ -516,9 +527,10 @@ export default function TennisSyncApp() {
         drawVideoToRect(ctx, v1Ref.current, v1.mirror, v1.pan, v1.scale, 0, 0, singleW, singleH);
         drawVideoToRect(ctx, v2Ref.current, v2.mirror, v2.pan, v2.scale, singleW, 0, singleW, singleH);
         const thumbUrl = canvas.toDataURL('image/jpeg', 0.8);
+        const safeTargetTime = parseFloat(targetTime) || 2;
         const newRecord = {
             id: Date.now(), time: new Date().toLocaleTimeString(), date: new Date().toLocaleDateString(),
-            thumbnail: thumbUrl, ratioKey, targetTime,
+            thumbnail: thumbUrl, ratioKey, targetTime: safeTargetTime,
             v1: { file: v1.file, in: v1.in, out: v1.out, pan: v1.pan, scale: v1.scale, mirror: v1.mirror },
             v2: { file: v2.file, in: v2.in, out: v2.out, pan: v2.pan, scale: v2.scale, mirror: v2.mirror }
         };
@@ -548,41 +560,79 @@ export default function TennisSyncApp() {
         link.download = `SYNC_${new Date().getTime()}.jpg`; link.click();
     };
 
-    const handleExportVideo = () => {
+    const handleExportVideo = (mode = 'combined') => {
         if(isPlaying) togglePlay(); setIsExporting(true);
+        const safeTargetTime = parseFloat(targetTime) || 2;
         const canvas = document.createElement('canvas');
         const [rW, rH] = ratioKey.split(':').map(Number);
         const singleW = 960; const singleH = (singleW * rH) / rW;
-        canvas.width = 1920; canvas.height = singleH + 20; 
+        canvas.width = mode === 'combined' ? 1920 : 960; canvas.height = singleH + 20; 
         const ctx = canvas.getContext('2d');
         let mimeType = 'video/mp4';
         if (!MediaRecorder.isTypeSupported(mimeType)) mimeType = 'video/webm;codecs=vp9';
         if (!MediaRecorder.isTypeSupported(mimeType)) mimeType = 'video/webm';
         const stream = canvas.captureStream(30); const recorder = new MediaRecorder(stream, { mimeType });
         const chunks = [];
-        recorder.ondataavailable = e => chunks.push(e.data);
-        recorder.onstop = () => {
-            const blob = new Blob(chunks, { type: mimeType });
-            const link = document.createElement('a'); link.href = URL.createObjectURL(blob);
-            link.download = `SYNC_${new Date().getTime()}.${mimeType.includes('mp4') ? 'mp4' : 'webm'}`;
-            link.click(); setIsExporting(false);
+        
+        const fallbackDownload = (blob, filename) => {
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a'); 
+            link.href = url;
+            link.download = filename;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            setTimeout(() => URL.revokeObjectURL(url), 100);
         };
-        if (v1Ref.current && v1.url) { v1Ref.current.currentTime = v1.in; v1Ref.current.playbackRate = targetTime > 0 ? (v1.out - v1.in) / targetTime : 1; }
-        if (v2Ref.current && v2.url) { v2Ref.current.currentTime = v2.in; v2Ref.current.playbackRate = targetTime > 0 ? (v2.out - v2.in) / targetTime : 1; }
+
+        recorder.ondataavailable = e => chunks.push(e.data);
+        recorder.onstop = async () => {
+            const ext = mimeType.includes('mp4') ? 'mp4' : 'webm';
+            const filename = `SYNC_${mode.toUpperCase()}_${new Date().getTime()}.${ext}`;
+            const blob = new Blob(chunks, { type: mimeType });
+            const file = new File([blob], filename, { type: mimeType });
+            
+            setIsExporting(false);
+            
+            // 尝试调用移动端原生分享菜单 (支持直接"保存到相册")
+            if (navigator.canShare && navigator.canShare({ files: [file] })) {
+                try {
+                    await navigator.share({
+                        files: [file],
+                        title: 'T-MIRROR Sync Video'
+                    });
+                } catch (err) {
+                    console.error('Share failed or cancelled:', err);
+                    fallbackDownload(blob, filename);
+                }
+            } else {
+                fallbackDownload(blob, filename); // PC或不支持原生Share时的降级方案
+            }
+        };
+        if (v1Ref.current && v1.url) { v1Ref.current.currentTime = v1.in; v1Ref.current.playbackRate = safeTargetTime > 0 ? (v1.out - v1.in) / safeTargetTime : 1; }
+        if (v2Ref.current && v2.url) { v2Ref.current.currentTime = v2.in; v2Ref.current.playbackRate = safeTargetTime > 0 ? (v2.out - v2.in) / safeTargetTime : 1; }
 
         setTimeout(() => {
             recorder.start();
             if (v1Ref.current && v1.url) v1Ref.current.play().catch(e => console.error(e));
             if (v2Ref.current && v2.url) v2Ref.current.play().catch(e => console.error(e));
-            let p = 0; const durationMs = targetTime * 1000; let startTime = performance.now();
-            ctx.fillStyle = COLORS.deepGreen; ctx.fillRect(0, 0, 1920, singleH + 20);
+            let p = 0; const durationMs = safeTargetTime * 1000; let startTime = performance.now();
+            ctx.fillStyle = COLORS.deepGreen; ctx.fillRect(0, 0, canvas.width, singleH + 20);
 
             const exportLoop = (now) => {
                 let elapsed = now - startTime; p = Math.min(elapsed / durationMs, 1); setMasterProgress(p);
-                ctx.fillStyle = COLORS.deepGreen; ctx.fillRect(0, 0, 1920, singleH + 20);
-                drawVideoToRect(ctx, v1Ref.current, v1.mirror, v1.pan, v1.scale, 0, 0, singleW, singleH);
-                drawVideoToRect(ctx, v2Ref.current, v2.mirror, v2.pan, v2.scale, singleW, 0, singleW, singleH);
-                ctx.fillStyle = COLORS.orange; ctx.fillRect(0, singleH, 1920 * p, 20); // 进度条
+                ctx.fillStyle = COLORS.deepGreen; ctx.fillRect(0, 0, canvas.width, singleH + 20);
+                
+                if (mode === 'combined' || mode === 'v1') {
+                    drawVideoToRect(ctx, v1Ref.current, v1.mirror, v1.pan, v1.scale, 0, 0, singleW, singleH);
+                }
+                if (mode === 'combined') {
+                    drawVideoToRect(ctx, v2Ref.current, v2.mirror, v2.pan, v2.scale, singleW, 0, singleW, singleH);
+                } else if (mode === 'v2') {
+                    drawVideoToRect(ctx, v2Ref.current, v2.mirror, v2.pan, v2.scale, 0, 0, singleW, singleH);
+                }
+
+                ctx.fillStyle = COLORS.orange; ctx.fillRect(0, singleH, canvas.width * p, 20); // 进度条
                 if (p < 1) { requestAnimationFrame(exportLoop); } 
                 else {
                     if (v1Ref.current) v1Ref.current.pause(); if (v2Ref.current) v2Ref.current.pause();
@@ -714,7 +764,10 @@ export default function TennisSyncApp() {
                         </div>
                         <div className="flex items-center gap-1 sm:gap-2 text-[#0A261D]">
                             <input 
-                                type="number" min="0.5" max="10" step="0.1" value={targetTime} onChange={e => setTargetTime(parseFloat(e.target.value) || 2)} disabled={isPlaying}
+                                type="number" min="0.5" max="10" step="0.1" 
+                                value={targetTime} 
+                                onChange={e => setTargetTime(e.target.value)} 
+                                disabled={isPlaying}
                                 className="w-12 sm:w-16 bg-transparent text-lg sm:text-xl font-black border-b-2 border-[#0A261D] focus:border-[#E27546] outline-none text-center rounded-none"
                             />
                             <span className="font-bold uppercase text-xs sm:text-sm">{t.sec}</span>
@@ -722,18 +775,33 @@ export default function TennisSyncApp() {
                     </div>
 
                     {/* Actions */}
-                    <div className="flex flex-col sm:flex-row items-stretch lg:items-center gap-2 sm:gap-3 w-full lg:w-auto">
-                        <button onClick={handleSaveRecord} className="flex-1 flex items-center justify-center gap-2 px-4 sm:px-6 py-3 sm:py-4 bg-[#F6F3E6] text-[#0A261D] rounded-xl border-2 border-[#0A261D] hover:bg-[#E27546] transition-colors font-black text-[10px] sm:text-xs uppercase tracking-widest shadow-[2px_2px_0px_#0A261D] sm:shadow-[4px_4px_0px_#0A261D]">
-                            <Save className="w-3.5 h-3.5 sm:w-4 sm:h-4" /> {t.saveRecord}
-                        </button>
+                    <div className="flex flex-col lg:flex-row items-stretch lg:items-center gap-2 sm:gap-3 w-full lg:w-auto">
+                        {/* Record & Snapshot */}
+                        <div className="grid grid-cols-2 gap-2 sm:gap-3 w-full lg:w-auto">
+                            <button onClick={handleSaveRecord} className="flex items-center justify-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2.5 sm:py-4 bg-[#F6F3E6] text-[#0A261D] rounded-xl border-2 border-[#0A261D] hover:bg-[#E27546] transition-colors font-black text-[10px] sm:text-xs uppercase tracking-widest shadow-[2px_2px_0px_#0A261D]">
+                                <Save className="w-3.5 h-3.5 sm:w-4 sm:h-4" /> <span className="hidden sm:inline">{t.saveRecord}</span><span className="sm:hidden">记录</span>
+                            </button>
+                            
+                            <button onClick={handleScreenshot} className="flex items-center justify-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2.5 sm:py-4 bg-[#F6F3E6] text-[#0A261D] rounded-xl border-2 border-[#0A261D] hover:bg-[#E27546] transition-colors font-black text-[10px] sm:text-xs uppercase tracking-widest shadow-[2px_2px_0px_#0A261D]">
+                                <Camera className="w-3.5 h-3.5 sm:w-4 sm:h-4" /> <span className="hidden sm:inline">{t.snapshot}</span><span className="sm:hidden">截图</span>
+                            </button>
+                        </div>
                         
-                        <button onClick={handleScreenshot} className="flex-1 flex items-center justify-center gap-2 px-4 sm:px-6 py-3 sm:py-4 bg-[#F6F3E6] text-[#0A261D] rounded-xl border-2 border-[#0A261D] hover:bg-[#E27546] transition-colors font-black text-[10px] sm:text-xs uppercase tracking-widest shadow-[2px_2px_0px_#0A261D] sm:shadow-[4px_4px_0px_#0A261D]">
-                            <Camera className="w-3.5 h-3.5 sm:w-4 sm:h-4" /> {t.snapshot}
-                        </button>
-                        
-                        <button onClick={handleExportVideo} className="flex-1 flex items-center justify-center gap-2 px-4 sm:px-8 py-3 sm:py-4 bg-[#0A261D] text-[#F6F3E6] rounded-xl border-2 border-[#0A261D] hover:bg-[#E27546] hover:text-[#0A261D] transition-colors font-black text-[10px] sm:text-sm uppercase tracking-widest shadow-[2px_2px_0px_#0A261D] sm:shadow-[4px_4px_0px_#0A261D]">
-                            <Download className="w-4 h-4 sm:w-5 sm:h-5" /> {t.exportMp4}
-                        </button>
+                        {/* Export Buttons */}
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 sm:gap-3 w-full lg:w-auto">
+                            <button onClick={() => handleExportVideo('combined')} className="sm:col-span-1 flex items-center justify-center gap-1.5 sm:gap-2 px-4 sm:px-6 py-2.5 sm:py-4 bg-[#0A261D] text-[#F6F3E6] rounded-xl border-2 border-[#0A261D] hover:bg-[#E27546] hover:text-[#0A261D] transition-colors font-black text-[10px] sm:text-xs uppercase tracking-widest shadow-[2px_2px_0px_#0A261D]">
+                                <Download className="w-3.5 h-3.5 sm:w-4 sm:h-4" /> {t.exportCombined}
+                            </button>
+
+                            <div className="grid grid-cols-2 sm:col-span-2 gap-2 sm:gap-3">
+                                <button onClick={() => handleExportVideo('v1')} className="flex items-center justify-center gap-1.5 sm:gap-2 px-2 sm:px-4 py-2.5 sm:py-4 bg-[#E27546] text-[#0A261D] rounded-xl border-2 border-[#0A261D] hover:bg-[#F6F3E6] transition-colors font-black text-[9px] sm:text-[10px] uppercase tracking-widest shadow-[2px_2px_0px_#0A261D]">
+                                    <Download className="w-3 h-3 sm:w-3.5 sm:h-3.5" /> {t.exportV1}
+                                </button>
+                                <button onClick={() => handleExportVideo('v2')} className="flex items-center justify-center gap-1.5 sm:gap-2 px-2 sm:px-4 py-2.5 sm:py-4 bg-[#E27546] text-[#0A261D] rounded-xl border-2 border-[#0A261D] hover:bg-[#F6F3E6] transition-colors font-black text-[9px] sm:text-[10px] uppercase tracking-widest shadow-[2px_2px_0px_#0A261D]">
+                                    <Download className="w-3 h-3 sm:w-3.5 sm:h-3.5" /> {t.exportV2}
+                                </button>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
