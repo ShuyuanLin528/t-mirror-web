@@ -306,7 +306,24 @@ const VideoBox = ({ title, vState, setVState, vRef, badgeText, isPlaying, isPlay
                                 const file = e.target.files[0];
                                 if(file) {
                                     if(vState.url) URL.revokeObjectURL(vState.url);
-                                    setVState(p => ({ ...p, file, url: URL.createObjectURL(file), in: 0, out: 1, pan: { x: 50, y: 50 }, scale: 1 }));
+                                    const objUrl = URL.createObjectURL(file);
+                                    setVState(p => ({ ...p, file, url: objUrl, in: 0, out: 1, pan: { x: 50, y: 50 }, scale: 1 }));
+                                    
+                                    // 核心修复：利用 input 的用户交互权限，静默唤醒未静音的视频加载首帧
+                                    setTimeout(() => {
+                                        if (vRef.current) {
+                                            vRef.current.load();
+                                            const p = vRef.current.play();
+                                            if (p !== undefined) {
+                                                p.then(() => {
+                                                    vRef.current.pause();
+                                                    vRef.current.currentTime = 0.001;
+                                                }).catch(() => {
+                                                    console.warn("Auto-play format locked by iOS until full play.");
+                                                });
+                                            }
+                                        }
+                                    }, 100);
                                 }
                             }}
                         />
@@ -314,14 +331,18 @@ const VideoBox = ({ title, vState, setVState, vRef, badgeText, isPlaying, isPlay
                 ) : (
                     <>
                         <div style={{ width: '100%', height: '100%', transform: vState.mirror ? 'scaleX(-1)' : 'none' }}>
+                            {/* 去除 muted，并添加 #t=0.001 强制拉取首帧 */}
                             <video 
-                                ref={vRef} src={vState.url} draggable={false}
+                                ref={vRef} src={vState.url ? `${vState.url}#t=0.001` : ''} draggable={false}
                                 style={{ position: 'absolute', width: `${finalW_pct}%`, height: `${finalH_pct}%`, left: `${left_pct}%`, top: `${top_pct}%`, objectFit: 'cover', maxWidth: 'none', maxHeight: 'none' }}
-                                className={`cursor-move`} playsInline muted preload="auto"
+                                className={`cursor-move`} playsInline preload="auto"
                                 onLoadedMetadata={(e) => {
                                     setVState(p => ({ ...p, duration: vRef.current.duration || 1, out: vRef.current.duration || 1, vw: e.target.videoWidth || 1, vh: e.target.videoHeight || 1 }));
-                                    // 强制移动端渲染首帧 (修复上传后白屏问题)
-                                    vRef.current.currentTime = 0.001;
+                                }}
+                                onLoadedData={() => {
+                                    if (vRef.current && vRef.current.currentTime === 0) {
+                                        vRef.current.currentTime = 0.001;
+                                    }
                                 }}
                                 onTimeUpdate={handleTimeUpdate}
                             />
@@ -571,7 +592,28 @@ export default function TennisSyncApp() {
         let mimeType = 'video/mp4';
         if (!MediaRecorder.isTypeSupported(mimeType)) mimeType = 'video/webm;codecs=vp9';
         if (!MediaRecorder.isTypeSupported(mimeType)) mimeType = 'video/webm';
-        const stream = canvas.captureStream(30); const recorder = new MediaRecorder(stream, { mimeType });
+        
+        const stream = canvas.captureStream(30); 
+        
+        // 追加音频轨道至导出流
+        try {
+            const addAudioTracks = (videoNode) => {
+                if (!videoNode) return;
+                let vStream = null;
+                if (videoNode.captureStream) vStream = videoNode.captureStream();
+                else if (videoNode.mozCaptureStream) vStream = videoNode.mozCaptureStream();
+                
+                if (vStream) {
+                    vStream.getAudioTracks().forEach(track => stream.addTrack(track));
+                }
+            };
+            if (mode === 'combined' || mode === 'v1') addAudioTracks(v1Ref.current);
+            if (mode === 'combined' || mode === 'v2') addAudioTracks(v2Ref.current);
+        } catch (err) {
+            console.warn("Audio mixing failed:", err);
+        }
+
+        const recorder = new MediaRecorder(stream, { mimeType });
         const chunks = [];
         
         const fallbackDownload = (blob, filename) => {
