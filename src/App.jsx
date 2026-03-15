@@ -307,7 +307,6 @@ const VideoBox = ({ title, vState, setVState, vRef, badgeText, isPlaying, isPlay
                                 if(file) {
                                     if(vState.url) URL.revokeObjectURL(vState.url);
                                     const objUrl = URL.createObjectURL(file);
-                                    // 移除了容易引起崩溃的 setTimeout play() 代码
                                     setVState(p => ({ ...p, file, url: objUrl, in: 0, out: 1, pan: { x: 50, y: 50 }, scale: 1 }));
                                 }
                             }}
@@ -316,19 +315,13 @@ const VideoBox = ({ title, vState, setVState, vRef, badgeText, isPlaying, isPlay
                 ) : (
                     <>
                         <div style={{ width: '100%', height: '100%', transform: vState.mirror ? 'scaleX(-1)' : 'none' }}>
-                            {/* 去除 muted 保证声音，附加 #t=0.001 强制拉取首帧画面 */}
+                            {/* 回退到最干净的加载方式，去除了 muted 以保留声音，移除了强制首帧的黑科技 */}
                             <video 
-                                ref={vRef} src={vState.url ? `${vState.url}#t=0.001` : ''} draggable={false}
+                                ref={vRef} src={vState.url} draggable={false}
                                 style={{ position: 'absolute', width: `${finalW_pct}%`, height: `${finalH_pct}%`, left: `${left_pct}%`, top: `${top_pct}%`, objectFit: 'cover', maxWidth: 'none', maxHeight: 'none' }}
-                                className={`cursor-move`} playsInline preload="auto"
+                                className={`cursor-move`} playsInline
                                 onLoadedMetadata={(e) => {
                                     setVState(p => ({ ...p, duration: vRef.current.duration || 1, out: vRef.current.duration || 1, vw: e.target.videoWidth || 1, vh: e.target.videoHeight || 1 }));
-                                }}
-                                onLoadedData={() => {
-                                    // 数据加载完成时，安全地定位到首帧，解决白屏问题
-                                    if (vRef.current && vRef.current.currentTime === 0) {
-                                        vRef.current.currentTime = 0.001;
-                                    }
                                 }}
                                 onTimeUpdate={handleTimeUpdate}
                             />
