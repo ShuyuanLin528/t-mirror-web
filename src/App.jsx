@@ -121,7 +121,7 @@ const translations = {
     }
 };
 
-const VideoBox = ({ title, vState, setVState, vRef, badgeText, isPlaying, isPlayingRef, ratioKey, showGrid, t }) => {
+const VideoBox = ({ title, vState, setVState, vRef, badgeText, isPlaying, isPlayingRef, ratioKey, showGrid, t, forceMute }) => {
     const [localTime, setLocalTime] = useState(0);
     const [isDragging, setIsDragging] = useState(false);
     const dragStartRef = useRef({ x: 0, y: 0, panX: 50, panY: 50, w: 1, h: 1, startScale: 1 });
@@ -169,13 +169,6 @@ const VideoBox = ({ title, vState, setVState, vRef, badgeText, isPlaying, isPlay
         if(vRef.current) {
             const t_val = vRef.current.currentTime;
             setVState(p => ({ ...p, out: t_val, in: Math.min(p.in, t_val - 0.1) }));
-        }
-    };
-
-    const stepFrame = (amount) => {
-        if(vRef.current) {
-            vRef.current.currentTime += amount;
-            setLocalTime(vRef.current.currentTime);
         }
     };
 
@@ -315,11 +308,11 @@ const VideoBox = ({ title, vState, setVState, vRef, badgeText, isPlaying, isPlay
                 ) : (
                     <>
                         <div style={{ width: '100%', height: '100%', transform: vState.mirror ? 'scaleX(-1)' : 'none' }}>
-                            {/* 回退到最干净的加载方式，去除了 muted 以保留声音，移除了强制首帧的黑科技 */}
+                            {/* 加入 forceMute 控制，解决双视频播放被手机系统拦截的问题 */}
                             <video 
                                 ref={vRef} src={vState.url} draggable={false}
                                 style={{ position: 'absolute', width: `${finalW_pct}%`, height: `${finalH_pct}%`, left: `${left_pct}%`, top: `${top_pct}%`, objectFit: 'cover', maxWidth: 'none', maxHeight: 'none' }}
-                                className={`cursor-move`} playsInline
+                                className={`cursor-move`} playsInline muted={forceMute}
                                 onLoadedMetadata={(e) => {
                                     setVState(p => ({ ...p, duration: vRef.current.duration || 1, out: vRef.current.duration || 1, vw: e.target.videoWidth || 1, vh: e.target.videoHeight || 1 }));
                                 }}
@@ -356,6 +349,7 @@ const VideoBox = ({ title, vState, setVState, vRef, badgeText, isPlaying, isPlay
                             </div>
                         )}
 
+                        {/* 优化重新上传按钮：手机端半透明长驻显示，方便随时点击重新导入 */}
                         <button 
                             onClick={() => { 
                                 if(!isPlaying && !isLocalPlaying) {
@@ -364,7 +358,7 @@ const VideoBox = ({ title, vState, setVState, vRef, badgeText, isPlaying, isPlay
                                 }
                             }}
                             disabled={isPlaying || isLocalPlaying}
-                            className="absolute top-2 right-2 md:top-3 md:right-3 bg-[#E27546] text-[#0A261D] border-2 border-[#0A261D] font-bold text-[9px] md:text-xs px-2 py-1 md:px-3 md:py-1.5 rounded-full opacity-0 group-hover:opacity-100 transition-opacity disabled:hidden z-10 uppercase tracking-widest hover:bg-[#F6F3E6]"
+                            className="absolute top-2 right-2 md:top-3 md:right-3 bg-[#E27546] text-[#0A261D] border-2 border-[#0A261D] font-bold text-[9px] md:text-xs px-2 py-1 md:px-3 md:py-1.5 rounded-full opacity-80 md:opacity-0 md:group-hover:opacity-100 transition-opacity disabled:hidden z-10 uppercase tracking-widest hover:bg-[#F6F3E6]"
                         >
                             {t.reset}
                         </button>
@@ -401,14 +395,7 @@ const VideoBox = ({ title, vState, setVState, vRef, badgeText, isPlaying, isPlay
                             {isLocalPlaying ? <Pause className="w-3 h-3 md:w-4 md:h-4 fill-current" /> : <Play className="w-3 h-3 md:w-4 md:h-4 fill-current ml-0.5" />}
                         </button>
 
-                        <div className="flex items-center gap-0.5 sm:gap-1">
-                            <button onClick={() => stepFrame(-0.033)} disabled={isPlaying || isLocalPlaying} className="w-6 h-6 sm:w-7 sm:h-7 md:w-8 md:h-8 flex items-center justify-center hover:bg-[#0A261D]/10 rounded-full text-[#0A261D] disabled:opacity-50">
-                                <SkipBack className="w-3 h-3 md:w-4 md:h-4" />
-                            </button>
-                            <button onClick={() => stepFrame(0.033)} disabled={isPlaying || isLocalPlaying} className="w-6 h-6 sm:w-7 sm:h-7 md:w-8 md:h-8 flex items-center justify-center hover:bg-[#0A261D]/10 rounded-full text-[#0A261D] disabled:opacity-50">
-                                <SkipForward className="w-3 h-3 md:w-4 md:h-4" />
-                            </button>
-                        </div>
+                        {/* 已删除多余的快进和快退图标 */}
 
                         <div className="flex items-center gap-1 md:gap-2">
                             <button onClick={setIn} disabled={isPlaying || isLocalPlaying} className="p-1.5 sm:px-2 sm:py-1 md:px-3 md:py-1.5 bg-transparent text-[#0A261D] hover:bg-[#0A261D] hover:text-[#F6F3E6] rounded-full text-[10px] md:text-xs font-bold border-2 border-[#0A261D] flex items-center gap-1 disabled:opacity-50 transition-colors uppercase">
@@ -740,10 +727,10 @@ export default function TennisSyncApp() {
                     </button>
                 </div>
 
-                {/* 并排的视频区域 - 强制在手机上也是2列 */}
+                {/* 核心修复：左侧参考视频 forceMute={true} 被强制静音，右侧保留原声，从而完美绕过手机必须静音才能同步播放双视频的限制 */}
                 <div className="grid grid-cols-2 gap-1.5 sm:gap-3 md:gap-6 lg:gap-8">
-                    <VideoBox title={t.refTitle} vState={v1} setVState={setV1} vRef={v1Ref} badgeText={t.pro} isPlaying={isPlaying} isPlayingRef={isPlayingRef} ratioKey={ratioKey} showGrid={showGrid} t={t} />
-                    <VideoBox title={t.myFormTitle} vState={v2} setVState={setV2} vRef={v2Ref} badgeText={t.me} isPlaying={isPlaying} isPlayingRef={isPlayingRef} ratioKey={ratioKey} showGrid={showGrid} t={t} />
+                    <VideoBox title={t.refTitle} vState={v1} setVState={setV1} vRef={v1Ref} badgeText={t.pro} isPlaying={isPlaying} isPlayingRef={isPlayingRef} ratioKey={ratioKey} showGrid={showGrid} t={t} forceMute={true} />
+                    <VideoBox title={t.myFormTitle} vState={v2} setVState={setV2} vRef={v2Ref} badgeText={t.me} isPlaying={isPlaying} isPlayingRef={isPlayingRef} ratioKey={ratioKey} showGrid={showGrid} t={t} forceMute={false} />
                 </div>
 
                 {bothReady && (
