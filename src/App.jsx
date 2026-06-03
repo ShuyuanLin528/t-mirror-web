@@ -25,6 +25,12 @@ const VIDEO_PRESETS = [
         url: '/presets/forehand/djokovic_forhand.mp4' 
     },
     { 
+        id: 'forehand_2', 
+        zh: '辛纳正手', 
+        en: 'Sinner-Forehand', 
+        url: '/presets/forehand/sinner_forhand.mp4' 
+    },
+    { 
         id: 'backhand_1', 
         zh: '反手', 
         en: 'Backhand', 
