@@ -19,22 +19,22 @@ const COLORS = {
 // --- 本地动作库全集 ---
 const VIDEO_PRESETS = [
     { 
-        id: 'forehand', 
-        zh: '标准正手攻球 (Forehand)', 
-        en: 'Pro Forehand', 
-        url: '/presets/forehand.mp4' 
+        id: 'forehand_1', 
+        zh: '德约科维奇正手', 
+        en: 'Djokovic-Forehand', 
+        url: '/presets/forehand/djokovic_forhand.mp4' 
     },
     { 
-        id: 'backhand', 
-        zh: '标准双手反拍 (Backhand)', 
-        en: 'Pro Backhand', 
+        id: 'backhand_1', 
+        zh: '反手', 
+        en: 'Backhand', 
         url: '/presets/backhand.mp4' 
     },
     { 
-        id: 'serve', 
-        zh: '强力发球示范 (Power Serve)', 
-        en: 'Power Serve', 
-        url: '/presets/serve.mp4'    
+        id: 'serve_1', 
+        zh: '莱巴金娜发球', 
+        en: 'Rybakina-Serve', 
+        url: '/presets/serve/rybakina_serve.mp4'    
     }
 ];
 
