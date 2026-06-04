@@ -477,7 +477,7 @@ export default function TennisSyncApp() {
     const [masterProgress, setMasterProgress] = useState(0); 
     const [isPlaying, setIsPlaying] = useState(false);
     const isPlayingRef = useRef(false); const animationRef = useRef(null);
-    const [targetTime, setTargetTime] = useState(2.0); 
+    const [targetTime, setTargetTime] = useState(6.0); 
     const [isExporting, setIsExporting] = useState(false);
     
     const [records, setRecords] = useState([]); 
@@ -490,7 +490,7 @@ export default function TennisSyncApp() {
     };
 
     const togglePlay = () => {
-        const safeTargetTime = parseFloat(targetTime) || 2;
+        const safeTargetTime = parseFloat(targetTime) || 6;
         if (isPlaying) {
             setIsPlaying(false); isPlayingRef.current = false;
             if (v1Ref.current) v1Ref.current.pause(); if (v2Ref.current) v2Ref.current.pause();
@@ -539,7 +539,7 @@ export default function TennisSyncApp() {
         drawVideoToRect(ctx, v1Ref.current, v1.mirror, v1.pan, v1.scale, 0, 0, singleW, singleH);
         drawVideoToRect(ctx, v2Ref.current, v2.mirror, v2.pan, v2.scale, singleW, 0, singleW, singleH);
         const thumbUrl = canvas.toDataURL('image/jpeg', 0.8);
-        const safeTargetTime = parseFloat(targetTime) || 2;
+        const safeTargetTime = parseFloat(targetTime) || 6;
         const newRecord = {
             id: Date.now(), time: new Date().toLocaleTimeString(), date: new Date().toLocaleDateString(),
             thumbnail: thumbUrl, ratioKey, targetTime: safeTargetTime,
@@ -577,7 +577,7 @@ export default function TennisSyncApp() {
 
     const handleExportVideo = (mode = 'combined') => {
         if(isPlaying) togglePlay(); setIsExporting(true);
-        const safeTargetTime = parseFloat(targetTime) || 2;
+        const safeTargetTime = parseFloat(targetTime) || 6;
         const canvas = document.createElement('canvas');
         const [rW, rH] = ratioKey.split(':').map(Number);
         const singleW = 960; const singleH = (singleW * rH) / rW;
