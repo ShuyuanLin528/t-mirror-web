@@ -22,13 +22,13 @@ const VIDEO_PRESETS = [
         id: 'forehand_1', 
         zh: '德约科维奇正手', 
         en: 'Djokovic-Forehand', 
-        url: '/presets/forehand/djokovic_forhand.mp4' 
+        url: '/presets/forehand/djokovic_forehand.mp4' 
     },
     { 
         id: 'forehand_2', 
         zh: '辛纳正手', 
         en: 'Sinner-Forehand', 
-        url: '/presets/forehand/sinner_forhand.mp4' 
+        url: '/presets/forehand/sinner_forehand.mp4' 
     },
     { 
         id: 'backhand_1', 
